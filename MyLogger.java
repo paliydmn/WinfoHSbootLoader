@@ -5,12 +5,12 @@ import javafx.scene.control.TextArea;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 
-public class Logger {
+public class MyLogger {
     private static TextArea txtAreaLog;
     private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
 
     void setTxtAreaLog(TextArea txtAreaLog) {
-        Logger.txtAreaLog = txtAreaLog;
+        MyLogger.txtAreaLog = txtAreaLog;
     }
 
     static void printLog(String log){

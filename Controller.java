@@ -25,8 +25,9 @@ public class Controller {
     private static final String ARP_GET_IP_HW = "arp -a";
     private static final String TRACERT_GET_HOST_HW = "tracert -h 5 -w 20";
     private static final String[] MIKROTIK_MACS = {"E4-8D-8C", "6C-3B-6B", "CC-2D-E0", "4C-5E-0C", "D4-CA-6D", "00-0C-42", "64-D1-54"};
-    private static Logger logger;
-    private final CollectionMK collectionMK = new CollectionMK();
+    private static MyLogger myLogger;
+
+    private final CollectionMK collectionMK = CollectionMKSingleton.getInstance();
     public Button btnRescan;
     public Button btnUpload;
     public Button btnSelectFile;
@@ -38,17 +39,20 @@ public class Controller {
     public TableColumn<String, String> clmnName;
     public TableColumn<String, String> clmnROS;
     public TableColumn<String, String> clmnDescrip;
+    public TableColumn<String, String> clmnStatus;
 
     public TextArea txtAreaLog;
     public ProgressBar progress;
     public Label statusLabel;
+    public MenuItem menuItemUpdateRos;
+
     private String NET = "";
     private ScanMK scanner = new ScanMK();
 
     @FXML
     public void initialize() {
-        logger = new Logger();
-        logger.setTxtAreaLog(txtAreaLog);
+        myLogger = new MyLogger();
+        myLogger.setTxtAreaLog(txtAreaLog);
 
         tblMainTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         tblMainTable.setEditable(true);
@@ -59,7 +63,9 @@ public class Controller {
         clmnName.setCellValueFactory(new PropertyValueFactory<String, String>("name"));
         clmnROS.setCellValueFactory(new PropertyValueFactory<String, String>("ros"));
         clmnDescrip.setCellValueFactory(new PropertyValueFactory<String, String>("description"));
+        clmnStatus.setCellValueFactory(new PropertyValueFactory<String, String>("status"));
 
+        scanner.parseArp();
         scanner.scan();//findMK();
         tblMainTable.setItems(collectionMK.getMKList());
 
@@ -77,7 +83,7 @@ public class Controller {
             System.out.println("textfield changed from " + oldValue + " to " + newValue);
         });*/
 
-        logger.printLog("Init completed!");
+        myLogger.printLog("Init completed!");
     }
 
     public void onGetFullData(ActionEvent actionEvent) {
@@ -86,14 +92,6 @@ public class Controller {
 
         tblMainTable.setItems(collectionMK.getMKList());
 
-    }
-
-    private boolean isMikrotik(String mac) {
-        for (String str : MIKROTIK_MACS) {
-            if (str.equals(mac.substring(0, 8)))
-                return true;
-        }
-        return false;
     }
 
     private List<String> getARPTable() throws IOException {
@@ -118,8 +116,82 @@ public class Controller {
         return arpList;
     }
 
-    public List<String> getHostName(String cmd, List<String> ipList) {
+    private boolean isMikrotik(String mac) {
+        for (String str : MIKROTIK_MACS) {
+            if (str.equals(mac.substring(0, 8)))
+                return true;
+        }
+        return false;
+    }
 
+    public void onUpload() {
+        MKConnectionManager upTask = new MKConnectionManager();
+        upTask.uploadScript();
+
+         /*
+           //MKConnectionManager.FTPHelper helper = new MKConnectionManager.FTPHelper();
+            for (MKItem mk : collectionMK.getMKList()) {
+            //new Thread(() -> new MKConnectionManager().upload(mk.getIp())).start();
+            try {
+                Thread.sleep(250);
+                MKConnectionManager.FTPHelper.upload(mk.getIp());
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            //write on boot script to routers
+            new MKConnectionManager.MKHelper().setOnBootScript(collectionMK);
+        }
+    */
+    }
+
+    public void onRescan() {
+        if (scanner.isRunning()) {
+            scanner.scan();
+        } else {
+            scanner = new ScanMK();
+            scanner.scan();
+        }
+    }
+
+    public void onFileSelect() {
+        FileChooser fileChooser = new FileChooser();
+        File selectedFile = fileChooser.showOpenDialog(null);
+
+        if (selectedFile != null) {
+            txtFieldScriptPath.setText(selectedFile.getAbsolutePath());
+        }
+    }
+
+    public void OnUpdateRos() {
+        MKConnectionManager mk = new MKConnectionManager();
+        mk.uploadRosFiles();
+    }
+
+    public void OnRebootMks() {
+        MKConnectionManager.MKHelper mkHelper = new MKConnectionManager.MKHelper();
+        mkHelper.rebootMk();
+    }
+
+    public void OnWriteToDB() {
+        for (MKItem mk : collectionMK.getMKList()) {
+            try {
+                MyLogger.printLog("Write to db ->>> ");
+                if (MikrotikDAO.insertBook(
+                        mk.getIp(),
+                        mk.getMAC(),
+                        mk.getName(),
+                        mk.getRos(),
+                        mk.getDescription(),
+                        mk.getStatus())) {
+                    MyLogger.printLog("Entry is added successfully <<<-");
+                }
+            } catch (SQLException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public List<String> getHostName(String cmd, List<String> ipList) {
         List<String> hostList = new ArrayList<>();
         for (String ip : ipList) {
             Scanner s = null;
@@ -138,31 +210,6 @@ public class Controller {
             }
         }
         return hostList;
-    }
-
-    public void onUpload() {
-
-        for (MKItem mk : collectionMK.getMKList()) {
-            //new Thread(() -> new MKConnectionManager().upload(mk.getIp())).start();
-            try {
-                Thread.sleep(250);
-                MKConnectionManager.FTPHelper.upload(mk.getIp());
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            //write on boot script to routers
-            new MKConnectionManager.MKHelper().setOnBootScript(collectionMK);
-        }
-    }
-
-    public void onRescan() {
-        if (scanner.isRunning()) {
-            scanner.scan();
-        } else {
-            scanner = new ScanMK();
-            scanner.scan();
-        }
-
     }
 
     private String getIp(String ipStr) {
@@ -191,15 +238,6 @@ public class Controller {
         }
     }
 
-    public void onFileSelect() {
-        FileChooser fileChooser = new FileChooser();
-        File selectedFile = fileChooser.showOpenDialog(null);
-
-        if (selectedFile != null) {
-            txtFieldScriptPath.setText(selectedFile.getAbsolutePath());
-        }
-    }
-
     private class PingTask extends Task<Integer> {
 
         @Override
@@ -216,7 +254,8 @@ public class Controller {
                             System.out.println(i + " = " + reachable);
                             if (reachable) {
                                 String log = ipAddress + i + " reachable";
-                                Logger.printLog(log);
+                                System.out.println(log);
+                                //MyLogger.printLog(log);
                             }
                             counter = i;
                             this.updateProgress(i, 254);
@@ -230,22 +269,23 @@ public class Controller {
             return counter;
         }
     }
+
     // PingTask pingTask;
     private class ScanMK {
-
         final PingTask pingTask = new PingTask();
+
         boolean isRunning() {
             return pingTask.isRunning();
         }
 
-        void scan() {
+        void parseArp() {
             List<String> arpList = null;
             try {
                 arpList = getARPTable();
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
+            assert arpList != null;
             NET = getIp(arpList.get(1));
             if (collectionMK.getMKList() != null && !collectionMK.getMKList().isEmpty()) {
                 collectionMK.getMKList().clear();
@@ -265,15 +305,17 @@ public class Controller {
                             mk.setName("");
                             mk.setRos("");
                             mk.setDescription("");
-
-                            //collectionMK.add(new MKItem(ip, mac, "", ""));
                             collectionMK.add(mk);
                             String log = "found: " + ip + " - " + mac;
-                            logger.printLog(log);
+                            myLogger.printLog(log);
                         }
                     }
                 }
             }
+        }
+
+        void scan() {
+            parseArp();
 
             final ProgressIndicator progressIndicator = new ProgressIndicator(0);
 
@@ -295,9 +337,13 @@ public class Controller {
                 pingTask.addEventHandler(WorkerStateEvent.WORKER_STATE_SUCCEEDED,
                         t -> {
                             statusLabel.textProperty().unbind();
-                            statusLabel.setText(String.valueOf(pingTask.getValue()));
+                            int counter = pingTask.getValue();
+                            statusLabel.setText(String.valueOf(counter));
+                            if (counter == 254) {
+                                btnRescan.setText("Rescan");
+                                parseArp();
+                            }
                         });
-
                 new Thread(pingTask).start();
             } else {
                 btnRescan.setText("Rescan");
@@ -317,26 +363,5 @@ public class Controller {
             // System.out.println(getHostName(TRACERT_GET_HOST_HW, currentNetIpList));
             System.out.println("Done");
         }
-    }
-    public void OnWriteToDB(ActionEvent actionEvent) {
-        for(MKItem mk : collectionMK.getMKList()){
-
-            try {
-                Logger.printLog("Write to db ->>> ");
-                if(MikrotikDAO.insertBook(
-                        mk.getIp(),
-                        mk.getMAC(),
-                        mk.getName(),
-                        mk.getRos(),
-                        mk.getDescription())){
-                    Logger.printLog("Entry is added successfully <<<-");
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-            } catch (ClassNotFoundException e) {
-                e.printStackTrace();
-            }
-        }
-
     }
 }

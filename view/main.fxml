@@ -18,11 +18,12 @@
                <children>
                   <TableView fx:id="tblMainTable" layoutX="14.0" layoutY="114.0" prefHeight="307.0" prefWidth="316.0" AnchorPane.bottomAnchor="79.0" AnchorPane.leftAnchor="15.0" AnchorPane.rightAnchor="20.0" AnchorPane.topAnchor="114.0">
                     <columns>
-                      <TableColumn fx:id="clmnIp" prefWidth="109.0" text="IP" />
-                      <TableColumn fx:id="clmnMac" prefWidth="134.0" text="MAC" />
-                        <TableColumn fx:id="clmnName" prefWidth="72.0" text="Name" />
-                        <TableColumn fx:id="clmnROS" prefWidth="72.0" text="ROS" />
-                        <TableColumn fx:id="clmnDescrip" prefWidth="72.0" text="Description" />
+                      <TableColumn fx:id="clmnIp" prefWidth="79.0" text="IP" />
+                      <TableColumn fx:id="clmnMac" prefWidth="142.0" text="MAC" />
+                        <TableColumn fx:id="clmnName" prefWidth="83.0" text="Name" />
+                        <TableColumn fx:id="clmnROS" prefWidth="54.0" text="ROS" />
+                        <TableColumn fx:id="clmnDescrip" prefWidth="78.0" text="Description" />
+                        <TableColumn fx:id="clmnStatus" prefWidth="95.0" text="Status" />
                     </columns>
                   </TableView>
                   <Label layoutX="14.0" layoutY="88.0" text="Found MikroTik Routers" />
@@ -57,13 +58,14 @@
         <menus>
           <Menu mnemonicParsing="false" text="File">
             <items>
-              <MenuItem fx:id="MenuItemWriteDB" mnemonicParsing="false" onAction="#OnWriteToDB" text="Write to DB" />
                   <MenuItem mnemonicParsing="false" text="Close" />
             </items>
           </Menu>
-          <Menu mnemonicParsing="false" text="Edit">
+          <Menu mnemonicParsing="false" text="Tools">
             <items>
-              <MenuItem mnemonicParsing="false" text="Delete" />
+              <MenuItem fx:id="menuItemWriteDB" mnemonicParsing="false" onAction="#OnWriteToDB" text="Write to DB" />
+              <MenuItem fx:id="menuItemUpdateRos" mnemonicParsing="false" onAction="#OnUpdateRos" text="Update ROS to V6.4" />
+                  <MenuItem fx:id="menuItemRebootMks" mnemonicParsing="false" onAction="#OnRebootMks" text="Reboot MKs" />
             </items>
           </Menu>
           <Menu mnemonicParsing="false" text="Help">

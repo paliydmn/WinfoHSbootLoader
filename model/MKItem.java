@@ -24,6 +24,7 @@ public class MKItem {
     private StringProperty name;
     private StringProperty ros;
     private StringProperty description;
+    private StringProperty status;
 
     public MKItem() {
         this.id = new SimpleIntegerProperty();
@@ -32,6 +33,7 @@ public class MKItem {
         this.name = new SimpleStringProperty();
         this.ros = new SimpleStringProperty();
         this.description = new SimpleStringProperty();
+        this.status = new SimpleStringProperty();
     }
 
     public int getId() {
@@ -104,6 +106,18 @@ public class MKItem {
 
     public void setDescription(String description) {
         this.description.set(description);
+    }
+
+     public String getStatus() {
+        return status.get();
+    }
+
+    public StringProperty statusProperty() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status.set(status);
     }
     /*    private String ip;
     private String mac;

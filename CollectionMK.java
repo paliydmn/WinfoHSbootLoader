@@ -12,10 +12,11 @@ public class CollectionMK {
     }
     public void clear() {
         mkList.clear();
-
     }
 
     public ObservableList<MKItem> getMKList() {
         return mkList;
     }
+
+
 }

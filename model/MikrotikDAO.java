@@ -9,14 +9,15 @@ public class MikrotikDAO {
         //*************************************
         //INSERT new mk
         //*************************************
-        public static boolean insertBook(String ip, String mac, String name, String ros, String descrip) throws SQLException, ClassNotFoundException {
+        public static boolean insertBook(String ip, String mac, String name, String ros, String descrip, String status) throws SQLException, ClassNotFoundException {
             //Declare a INSERT statement
-            String updateStmt = " INSERT INTO MIKROTIK ( ip, MAC, NAME, ROS, DESCRIPTION) VALUES (" +
+            String updateStmt = " INSERT INTO MIKROTIK ( ip, MAC, NAME, ROS, DESCRIPTION, STATUS) VALUES (" +
                     "'" + ip +
                     "','" + mac +
                     "','" + name +
                     "','" + ros +
                     "','" + descrip +
+                    "','" + status +
                     "')";
             try {
                 DBUtilSQLite.dbExecuteUpdate(updateStmt);

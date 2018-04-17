@@ -1,5 +1,6 @@
 package paliy;
 
+import javafx.concurrent.Task;
 import me.legrange.mikrotik.ApiConnection;
 import me.legrange.mikrotik.MikrotikApiException;
 import org.apache.commons.net.ftp.FTP;
@@ -15,28 +16,44 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class MKConnectionManager {
+    private static final String REBOOT_COMMAND = "/system/reboot";
+    private static final String MK_USER_NAME = "admin";
+    private static final String MK_PASSWORD = "";
+    private static String CMD_GET_RESOURCES_DATA = "/system/resource/print";
+    private static String CMD_GET_INTERFACES_DATA = "/interface/print";
 
-    static class MKHelper{
+    void uploadRosFiles() {
+        UploadRosTask uploadRosTask = new UploadRosTask();
+        Thread t = new Thread(uploadRosTask);
+        t.start();
+    }
+
+    void uploadScript() {
+        UploadScriptTask uploadScriptTask = new UploadScriptTask();
+        Thread t = new Thread(uploadScriptTask);
+        t.start();
+    }
+
+    static class MKHelper {
+
         private ApiConnection con = null; // connect to router
-
-        private static String CMD_GET_RESOURCES_DATA = "/system/resource/print";
-        private static String CMD_GET_INTERFACES_DATA = "/interface/print";
 
         public void collectData(CollectionMK forCollection) {
 
-            List<MKItem> temp = new ArrayList<>(forCollection.getMKList());
+            List<MKItem> temp = new ArrayList<>(CollectionMKSingleton.getInstance().getMKList());
+            //List<MKItem> temp = new ArrayList<>(forCollection.getMKList()); //replaced with singleton
             forCollection.getMKList().clear();
             StringBuffer etherBuff;
             for (MKItem item : temp) {
                 try {
                     con = ApiConnection.connect(item.getIp());
-                    con.login("admin", "");
+                    con.login(MK_USER_NAME, "");
 
                     List<Map<String, String>> resourcesMap = con.execute(CMD_GET_RESOURCES_DATA);
                     System.out.println(resourcesMap);
 
                     for (Map<String, String> map : resourcesMap) {
-                        String fullName =  map.get("platform") + " " + map.get("board-name") + " " +  map.get("architecture-name");
+                        String fullName = map.get("platform") + " " + map.get("board-name") + " " + map.get("architecture-name");
                         item.setName(fullName);
                         item.setRos(map.get("version"));
                     }
@@ -55,126 +72,115 @@ public class MKConnectionManager {
 
                 } catch (MikrotikApiException e) {
                     String log = "ERROR ---> " + e.getMessage();
-                    Logger.printLog(log);                }
-            }
-        }
-
-        public void setOnBootScript(CollectionMK forCollection){
-
-            for (MKItem item : forCollection.getMKList()) {
-                try {
-                    con = ApiConnection.connect(item.getIp());
-                    con.login("admin", "");
-                    Date date = Calendar.getInstance().getTime();
-                    date = new Date(date.getTime() + 15000);
-
-                    String time = new SimpleDateFormat("HH:mm:ss").format(date);
-                    System.out.println(new SimpleDateFormat("HH:mm:ss").format(date));
-
-                    //con.execute("/import file-name=flash/bootLoader.rsc");
-                    String log = "/system/script/add NAME=test1 source='{/system reset-configuration run-after-reset=flash/MKHotspotConfigScript.rsc}'";
-                    Logger.printLog(log);
-                    con.execute("/system/script/add name=test1 source='{/system reset-configuration run-after-reset=flash/MKHotspotConfigScript.rsc}'");
-
-                    log = "/system/scheduler/add start-time=" + time + " NAME=sch_reset on-event=test1";
-                    Logger.printLog(log);
-                    con.execute("/system/scheduler/add start-time=" + time + " name=sch_reset on-event=test1");
-
-                } catch (MikrotikApiException e) {
-                    String log = "ERROR ---> " + e.getMessage();
-                    Logger.printLog(log);
+                    MyLogger.printLog(log);
                 }
             }
         }
 
+        void rebootMk() {
+            for (MKItem item : CollectionMKSingleton.getInstance().getMKList()) {
+                try {
+                    con = ApiConnection.connect(item.getIp());
+                    con.login(MK_USER_NAME, MK_PASSWORD);
+                    con.execute(REBOOT_COMMAND);
+                    String log = "Reboot for " + item.getIp();
+                    MyLogger.printLog(log);
+                } catch (MikrotikApiException e) {
+                    String log = "ERROR ---> " + e.getMessage();
+                    MyLogger.printLog(log);
+                }
+            }
+        }
     }
 
-    static class FTPHelper {
+    private static class FTPHelper {
         private static void showServerReply(FTPClient ftpClient) {
             String[] replies = ftpClient.getReplyStrings();
             if (replies != null && replies.length > 0) {
                 for (String aReply : replies) {
                     String log = "SERVER: " + aReply;
-                    Logger.printLog(log);
+                     MyLogger.printLog(log);
                 }
             }
         }
+    }
 
-        public static void upload(String ip) {
-            //String server = "router.lan";
+    private class UploadRosTask extends Task<String> {
+        @Override
+        protected String call() throws Exception {
+            for (MKItem mk : CollectionMKSingleton.getInstance().getMKList()) {
+                upload(mk);
+            }
+            return "UPLOADED";
+        }
+
+        void upload(MKItem mk) {
             int port = 21;
-            String user = "admin";
-            String pass = "";
             FTPClient ftpClient = new FTPClient();
             try {
-                String log = "Start connect process to " + ip;
-                Logger.printLog(log);
-                ftpClient.connect(ip, port);
-                // ftpClient.connect(ip, port);
-                showServerReply(ftpClient);
+                String log = "Start connect process to " + mk.getIp();
+                System.out.println(log);
+                //  MyLogger.printLog(log);
+                ftpClient.connect(mk.getIp(), port);
+                FTPHelper.showServerReply(ftpClient);
                 int replyCode = ftpClient.getReplyCode();
                 if (!FTPReply.isPositiveCompletion(replyCode)) {
-                    log ="Operation failed. Server reply code: " + replyCode;
-                    Logger.printLog(log);
+                    log = "Operation failed. Server reply code: " + replyCode;
+                    MyLogger.printLog(log);
                     return;
                 }
-                boolean success = ftpClient.login(user, pass);
-                showServerReply(ftpClient);
+                boolean success = ftpClient.login(MK_USER_NAME, MK_PASSWORD);
+                FTPHelper.showServerReply(ftpClient);
                 if (!success) {
                     log = "Could not login to the server";
-                    Logger.printLog(log);
+                    MyLogger.printLog(log);
                     return;
                 } else {
                     log = "LOGGED IN SERVER";
-                    Logger.printLog(log);
+                    //MyLogger.printLog(log);
                 }
 
                 ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
                 // APPROACH #1: uploads first file using an InputStream
-                //File firstLocalFile = new File("D:/MKHotspotConfigScript.rsc");
-                File firstLocalFile = new File("D:/Micro/MKHotSpotScriptCreator/sources/configFile");
+                File folder = new File("src/paliy/assets/ros4/");
+                String to = "";
+                File[] listRosFiles = folder.listFiles();
+                Map<String, String> fromToRosMap = new HashMap<>();
 
-                String remoteFilePath = "flash/bootLoader.rsc";
-                InputStream inputStream = new FileInputStream(firstLocalFile);
-
-                log = "Start uploading file";
-                Logger.printLog(log);
-                boolean done = ftpClient.storeFile(remoteFilePath, inputStream);
-                inputStream.close();
-                if (done) {
-                    log = "The config file is uploaded successfully - " + ip;
-                    Logger.printLog(log);
+                for (int i = 0; i < listRosFiles.length; i++) {
+                    if (listRosFiles[i].isFile()) {
+                        fromToRosMap.put(folder.getPath() + "/" + listRosFiles[i].getName(), to + listRosFiles[i].getName());
+                        System.out.println("File " + listRosFiles[i].getName());
+                    } else if (listRosFiles[i].isDirectory()) {
+                        System.out.println("Directory " + listRosFiles[i].getName());
+                    }
                 }
 
-           /* // APPROACH #2: uploads second file using an OutputStream
-            File secondLocalFile = new File("E:/Test/Report.doc");
-            String secondRemoteFile = "test/Report.doc";
-            inputStream = new FileInputStream(secondLocalFile);
+              /*  //add Script to uploads
+                String remoteFilePath = "flash/bootLoader.rsc";
+                fromToRosMap.put("src/paliy/assets/bootLoader.rsc", remoteFilePath);*/
 
-            System.out.println("Start uploading second file");
-            OutputStream outputStream = ftpClient.storeFileStream(secondRemoteFile);
-            byte[] bytesIn = new byte[4096];
-            int read = 0;
-
-            while ((read = inputStream.read(bytesIn)) != -1) {
-                outputStream.write(bytesIn, 0, read);
-            }
-            inputStream.close();
-            outputStream.close();
-
-            boolean completed = ftpClient.completePendingCommand();
-            if (completed) {
-                System.out.println("The second file is uploaded successfully.");
-            }
-
-*/
-
+                InputStream is;
+                for (Map.Entry<String, String> map : fromToRosMap.entrySet()) {
+                    String file = map.getKey();
+                    is = new FileInputStream(file);
+                    boolean done = ftpClient.storeFile(map.getValue(), is);
+                    is.close();
+                    if (done) {
+                        log = file + " file is uploaded successfully to - " + mk.getIp();
+                        System.out.println(log);
+                        ;
+                        //   MyLogger.printLog(log);
+                    }
+                }
+                String status = mk.getStatus() == null ? "ROS files uploaded" : mk.getStatus() +"\nROS files uploaded";
+                mk.setStatus(status);
             } catch (IOException ex) {
-                String log = "Oops! Something wrong happened during connection to " + ip;
-                Logger.printLog(log);
+                String log = "Oops! Something wrong happened during connection to " + mk.getIp();
+                MyLogger.printLog(log);
                 log = "ERROR ---> " + ex.getMessage();
-                Logger.printLog(log);
+                MyLogger.printLog(log);
             } finally {
                 try {
                     if (ftpClient.isConnected()) {
@@ -184,10 +190,109 @@ public class MKConnectionManager {
                 } catch (IOException ex) {
                     ex.printStackTrace();
                     String log = "ERROR ---> " + ex.getMessage();
-                    Logger.printLog(log);
+                    MyLogger.printLog(log);
                 }
             }
-            Logger.printLog("****************************************\n");
+            MyLogger.printLog("****************************************\n");
         }
     }
+
+    private class UploadScriptTask extends Task<String> {
+        private ApiConnection con = null; // connect to router
+
+        @Override
+        protected String call() throws Exception {
+            for (MKItem mk : CollectionMKSingleton.getInstance().getMKList()) {
+                upload(mk);
+                setOnBootScript(mk);
+            }
+            return "UPLOADED";
+        }
+
+        void upload(MKItem mk) {
+            int port = 21;
+            FTPClient ftpClient = new FTPClient();
+            try {
+                String log = "Start connect process to " + mk;
+                MyLogger.printLog(log);
+                ftpClient.connect(mk.getIp(), port);
+                FTPHelper.showServerReply(ftpClient);
+                int replyCode = ftpClient.getReplyCode();
+                if (!FTPReply.isPositiveCompletion(replyCode)) {
+                    log = "Operation failed. Server reply code: " + replyCode;
+                    MyLogger.printLog(log);
+                    return;
+                }
+                boolean success = ftpClient.login(MK_USER_NAME, MK_PASSWORD);
+                FTPHelper.showServerReply(ftpClient);
+                if (!success) {
+                    log = "Could not login to the server";
+                    MyLogger.printLog(log);
+                    return;
+                } else {
+                    log = "LOGGED IN SERVER";
+                    //    MyLogger.printLog(log);
+                }
+
+                ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+                String remoteFilePath = "flash/bootLoader.rsc";
+                File file = new File("src/paliy/assets/bootLoader.rsc");
+
+                InputStream is = new FileInputStream(file);
+                boolean done = ftpClient.storeFile(remoteFilePath, is);
+                is.close();
+                if (done) {
+                    log = file + " Script is uploaded successfully to - " + mk.getIp();
+                    MyLogger.printLog(log);
+                }
+                String status = mk.getStatus() == null ? "Boot Script uploaded" : mk.getStatus() + "\nBoot Script uploaded ";
+                mk.setStatus(status);
+            } catch (IOException ex) {
+                String log = "Oops! Something wrong happened during connection to " + mk.getIp();
+                MyLogger.printLog(log);
+                log = "ERROR ---> " + ex.getMessage();
+                MyLogger.printLog(log);
+            } finally {
+                try {
+                    if (ftpClient.isConnected()) {
+                        ftpClient.logout();
+                        ftpClient.disconnect();
+                    }
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                    String log = "ERROR ---> " + ex.getMessage();
+                    MyLogger.printLog(log);
+                }
+            }
+            MyLogger.printLog("****************************************\n");
+        }
+
+        void setOnBootScript(MKItem mk) {
+            try {
+                con = ApiConnection.connect(mk.getIp());
+                con.login(MK_USER_NAME, MK_PASSWORD);
+                Date date = Calendar.getInstance().getTime();
+                date = new Date(date.getTime() + 15000);
+
+                String time = new SimpleDateFormat("HH:mm:ss").format(date);
+                System.out.println(new SimpleDateFormat("HH:mm:ss").format(date));
+
+                //con.execute("/import file-name=flash/bootLoader.rsc");
+                con.execute("/system/script/add name=test1 source='{/system reset-configuration run-after-reset=flash/MKHotspotConfigScript.rsc}'");
+                String log = "EXECUTED - /system/script/add NAME=test1 source='{/system reset-configuration run-after-reset=flash/MKHotspotConfigScript.rsc}'";
+                MyLogger.printLog(log);
+
+                con.execute("/system/scheduler/add start-time=" + time + " name=sch_reset on-event=test1");
+                log = "EXECUTED - /system/scheduler/add start-time=" + time + " NAME=sch_reset on-event=test1";
+                MyLogger.printLog(log);
+
+                String status = mk.getStatus() == null ? "Schedules created" : mk.getStatus() + "\nSchedules created ";
+                mk.setStatus(status);
+            } catch (MikrotikApiException e) {
+                String log = "ERROR ---> " + e.getMessage();
+                MyLogger.printLog(log);
+            }
+        }
+    }
+
 }
